@@ -390,7 +390,7 @@ if [ -z "$SOURCE_VM_SIZE" ]; then
     exit 1
 fi
 
-# Create VM by attaching existing managed disks as OS
+# Create target VM by attaching existing managed disks as OS
 az vm create \
     --name $targetVmName \
     --resource-group $resourceGroup \
@@ -398,6 +398,7 @@ az vm create \
     --os-type $osType \
     --subnet $targetVmSubnetId \
     --public-ip-address "" \
+    --nsg "" \
     --size $SOURCE_VM_SIZE \
     --tag "CreatedBy=script"
 
