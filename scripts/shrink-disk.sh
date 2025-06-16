@@ -326,11 +326,11 @@ echo ""
 LOCATION=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query location -o tsv)
 
 # Fixed values
-DiskType="StandardSSD_LRS"
+#DiskType="StandardSSD_LRS"
 HyperVGen="V2"
 
 # Create empty disk
-TARGET_DISK_ID=$(az disk create --resource-group "$resourceGroup" --name "$targetDiskName" --size-gb "$target_disk_size_gb" --location "$LOCATION" --sku "$DiskType" --hyper-v-generation "$HyperVGen" --query [id] -o tsv)
+TARGET_DISK_ID=$(az disk create --resource-group "$resourceGroup" --name "$targetDiskName" --size-gb "$target_disk_size_gb" --location "$LOCATION" --sku $STORAGE_TYPE --hyper-v-generation "$HyperVGen" --query [id] -o tsv)
 
 #
 # Attach empty data disk to VM on lun 1 (lun 0 if for the source data disk)
