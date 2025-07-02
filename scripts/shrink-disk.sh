@@ -400,7 +400,7 @@ az vm create \
     --public-ip-address "" \
     --nsg "" \
     --size $SOURCE_VM_SIZE \
-    --tag "CreatedBy=script"
+    --tag "CreatedBy=DiskShrinkingEngine"
 
 # Enable boot diagnostics
 az vm boot-diagnostics enable \
