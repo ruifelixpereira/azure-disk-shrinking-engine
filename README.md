@@ -54,11 +54,11 @@ These variables are used to configure the Azure environment, such as the resourc
 | - | - | - |
 | Global | `prefixName` | Prefix name/unique identifier. |
 | Global | `maxStep` | Maximum step (1 to 6) to run in the DSE script. For the complete process, set it to 6. The steps are:<br>- `1` Prepare source disk and create preparation VM.<br>- `2` Shrink the logical volumes, physical volume and partition.<br>- `3` Create new empty disk and attach to preparation VM.<br>- `4` Create and copy partitions to the new target disk.<br>- `5` Create target VM with the new target disk.<br>- `6` Clean up the preparation VM.<br> For example, if you want the temporary preparation virtual machine to be kept in the end for further analysis, set the `maxStep` to `5` and it will not execute the final cleanup step 6. |
-| Global | `vmShrinkPartsJsonFile` | json file with the vm disk shrinking configuration. |
+| Global | `vmShrinkPartsJsonFile` | json file with the VM disk shrinking configuration. |
+| Global | `vmListToShrinkJsonFile` | json file with the list of VMs to shrink. |
 | Azure Environment | `subscriptionId` | Azure subscription ID. |
 | Azure Environment | `resourceGroup` | Azure resource group name where the source VMs, preparation VMs, target VMs, disks, snapshots (including the snapshot for the os disk of the preparation VMs) are located/created. |
 | Azure Environment | `prepVmSubnetId` | Subnet ID for temporary preparation VMs. |
-| Azure Environment | `targetVmSubnetId` | Subnet ID for final target VMs. |
 | Preparation VMs | `prepVmSize` | VM size for the new preparation virtual machine. |
 | Preparation VMs | `prepVmOSDiskSnapshotName` | Name of the baseline snapshot to be used for the OS disk of the preparation VMs. |
 | Scripting resources | `pvshrinkScriptUrl` | URL of the pvshrink python script to be downloaded and executed. |
@@ -90,6 +90,9 @@ maxStep=6
 # Provide the json file with the vm disk shrinking configuration
 vmShrinkPartsJsonFile="vm-shrink-parts.json"
 
+# Provide the json file with the the list of VMs to shrink in parallel
+vmListToShrinkJsonFile="vm-list.json"
+
 #
 # Azure Environment configuration
 # 
@@ -107,9 +110,6 @@ resourceGroup="migration-rg"
 
 # Provide the id of the subnet where the temporary preparation VMs can be connected
 prepVmSubnetId="/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/migration-rg/providers/Microsoft.Network/virtualNetworks/migration-vnet/subnets/preparation"
-
-# Provide the id of the subnet where the final target VMs can be connected
-targetVmSubnetId="/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/migration-rg/providers/Microsoft.Network/virtualNetworks/migration-vnet/subnets/default"
 
 #
 # Preparation VMs configuration
@@ -169,12 +169,17 @@ For each VM, you need to provide the following information:
 | `target_disk_size_gb` | Size of the target disk in GB. This is the size of the new disk that will be created to hold the resized logical volumes. |
 
 
-## Shrink a disk with DSE
+## Shrink a single VM disk with DSE
 
 To start using the Disk Shrinking Engine (DSE), you need to execute the main script. This script will read the configuration from the `.env` file and the json configuration file, and then perform the disk shrinking operations. You need to pass the source virtual machine name as an argument to the script.
 
 ```bash
 # Usage: ./shrink_disk.sh <sourceVmName>
+
+# Example of shrinking the disk of the source VM named "rock8-west"
+./shrink-disk.sh rock8-west
+
+# If you prefer to store stderr and stdout in a file
 ./shrink-disk.sh rock8-west > shrink-disk.log 2>&1
 ```
 
@@ -183,6 +188,29 @@ The log file named `shrink-disk.log` contains the output (stdout + stderr) of th
 The result of the shrinking process is a new Azure VM with a smaller disk, which contains the resized logical volumes. The new VM will be created in the same resource group and virtual network as the source VM, it will be connected to the same subnet, and will have the same size. Example of the new VM created by DSE:
 
 ![alt text](docs/images/step5-target-vm.png)
+
+
+## Shrink a list of VM disks in parallel with DSE
+
+If you need to shrink a considerable number of VMs, you can create a file named `vm-list.json` with the list of the VMs to shrink. This file name can be customized in `.env` using the parameter `vmListToShrinkJsonFile`. Then, execute the `bulk-shrink-disks.sh` script.
+
+```bash
+./bulk-shrink-disks
+```
+
+This script will read the `vm-list.json` file and execute the disk shrinking process for each VM in parallel. The script will create a new VM for each source VM listed in the `vm-list.json` file, using the configurations provided in the `.env` file and the json configuration file.
+
+This is an example of the `vm-list.json` file with three VMs to shrink:
+
+```json
+[
+    { "source_vm_name": "rock8-west" },
+    { "source_vm_name": "vm-01" },
+    { "source_vm_name": "vm-mig-56" }
+]
+``` 
+
+For each VM in the list, the script will execute the `shrink-disk.sh` script with the corresponding source VM name. The output of each shrinking process will be stored in a log file named `<source_vm_name>-shrink-disk.log`, where `<source_vm_name>` is the name of the source VM being processed.
 
 
 ## Disk Shrinking Engine (DSE) internals

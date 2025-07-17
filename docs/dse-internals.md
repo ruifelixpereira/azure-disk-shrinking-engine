@@ -56,10 +56,11 @@ tmpfs                      769M     0  769M   0% /run/user/1000
 ## Step 1: Prepare source disk and create preparation VM
 
 In this first step DSE prepares the source disk for shrinking, safeguarding the original disk. These are the actions performed:
-- Create a snapshot of the original disk (step 1.0).
-- Create a new source disk from the snapshot that becomes our working source disk to be resized (step 1.1).
-- Create a new preparation VM with a default OS disk (step 1.1).
-- Attach the source disk as a data disk to the preparation VM (step 1.1).
+- Create a snapshot of the original disk.
+- Delete the source VM and the source disk but keeps the source NIC.
+- Create a new source disk from the snapshot that becomes our working source disk to be resized.
+- Create a new preparation VM with a default OS disk.
+- Attach the source disk as a data disk to the preparation VM.
 
 You can use the provided script to execute these actions (can be executed on Azure Cloud Shell) and adjust the `maxStep` variable to the maximum step you want to execute in the `.env` file. For example, if you want to execute only the first step, set `maxStep=1`:
 

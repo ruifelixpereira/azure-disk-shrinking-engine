@@ -10,11 +10,14 @@ if [ -z "$sourceVmName" ]; then
 fi
 
 echo ""
-echo "----- Starting disk shrink process for VM: $sourceVmName... -----"
+echo "----- [VM: $sourceVmName] Starting disk shrink process... -----"
 echo ""
 
 # load environment variables
 set -a && source .env && set +a
+
+# Exit immediately if any command fails (returns a non-zero exit code), preventing further execution.
+set -e
 
 # Required variables
 required_vars=(
@@ -27,7 +30,6 @@ required_vars=(
     "prepVmOSDiskSnapshotName"
     "vmShrinkPartsJsonFile"
     "pvshrinkScriptUrl"
-    "targetVmSubnetId"
 )
 
 # Set the current directory to where the script lives.
@@ -94,45 +96,45 @@ check_required_arguments
 # Get the max step to run from the first argument, default to 6 if not provided
 MAX_STEP=${maxStep:-6}
 if ! [[ "$MAX_STEP" =~ ^[0-6]$ ]]; then
-    echo "Error: maxStep must be a number between 0 and 6."
+    echo "[VM: $sourceVmName] Error: maxStep must be a number between 0 and 6."
     exit 1
 fi
 
 echo ""
-echo "----- STEP 0. Get source VM disk shrinking configuration... -----"
+echo "----- [VM: $sourceVmName] STEP 0. Get source VM disk shrinking configuration... -----"
 echo ""
 
 # Load source VM disk shrinking parameters from JSON file
 if [ ! -f "$vmShrinkPartsJsonFile" ]; then
-    echo "Error: JSON file with source VM disk shrinking parameters not found: $vmShrinkPartsJsonFile"
+    echo "[VM: $sourceVmName] Error: JSON file with source VM disk shrinking parameters not found: $vmShrinkPartsJsonFile"
     exit 1
 fi
 
 source_lv_sizes=$(jq -r --arg vm "$sourceVmName" '.[] | select(.vm_name == $vm) | .new_lv_sizes' "$vmShrinkPartsJsonFile")
 if [ -z "$source_lv_sizes" ]; then
-    echo "No logical volumes found for VM $sourceVmName in $vmShrinkPartsJsonFile."
+    echo "[VM: $sourceVmName] No logical volumes found for VM $sourceVmName in $vmShrinkPartsJsonFile."
     exit 1
 fi
 
 source_vg_name=$(jq -r --arg vm "$sourceVmName" '.[] | select(.vm_name == $vm) | .vg_name_to_shrink' "$vmShrinkPartsJsonFile")
 if [ -z "$source_vg_name" ]; then
-    echo "No volume group found for VM $sourceVmName in $vmShrinkPartsJsonFile."
+    echo "[VM: $sourceVmName] No volume group found for VM $sourceVmName in $vmShrinkPartsJsonFile."
     exit 1
 fi
 
 target_disk_size_gb=$(jq -r --arg vm "$sourceVmName" '.[] | select(.vm_name == $vm) | .target_disk_size_gb' "$vmShrinkPartsJsonFile")
 if [ -z "$target_disk_size_gb" ]; then
-    echo "No target disk size found for VM $sourceVmName in $vmShrinkPartsJsonFile."
+    echo "[VM: $sourceVmName] No target disk size found for VM $sourceVmName in $vmShrinkPartsJsonFile."
     exit 1
 fi
 
-echo "Source volume group name: $source_vg_name"
-echo "Source logical volumes sizes: $source_lv_sizes"
-echo "Target disk size: $target_disk_size_gb GB"
+echo "[VM: $sourceVmName] Source volume group name: $source_vg_name"
+echo "[VM: $sourceVmName] Source logical volumes sizes: $source_lv_sizes"
+echo "[VM: $sourceVmName] Target disk size: $target_disk_size_gb GB"
 
 if [ "$MAX_STEP" -lt 1 ]; then exit 0; fi
 echo ""
-echo "----- STEP 1. Preparation VM with copy of source disk... -----"
+echo "----- [VM: $sourceVmName] STEP 1. Preparation VM with copy of source disk... -----"
 echo ""
 
 # Set the context to the subscription Id where Managed Disk exists and where VM will be created
@@ -140,6 +142,7 @@ az account set --subscription $subscriptionId
 
 # Check if source vm exists
 SOURCE_DISK_NAME=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query "storageProfile.osDisk.name" -o tsv 2>/dev/null)
+
 if [ -z "$SOURCE_DISK_NAME" ]; then
     echo "Source VM $sourceVmName does not exist in resource group $resourceGroup."
     exit 1
@@ -149,7 +152,7 @@ fi
 # Create snapshot of the source disk
 #
 echo ""
-echo "----- STEP 1.1. Creating snapshot of the source disk $SOURCE_DISK_NAME in resource group $resourceGroup... -----"
+echo "----- [VM: $sourceVmName] STEP 1.1. Creating snapshot of the source disk $SOURCE_DISK_NAME in resource group $resourceGroup... -----"
 echo ""
 
 # Get source disk ID
@@ -175,10 +178,37 @@ SOURCE_SNAPSHOT_ID=$(az snapshot create --name $sourceVmOSDiskSnapshotName --res
 sourceDiskName="$prefixName-$SOURCE_DISK_NAME-source-disk"
 
 #
+# Delete the source VM + source disk but keep the NIC
+#
+echo ""
+echo "----- [VM: $sourceVmName] STEP 1.2. Deleting source VM + Disk after the snapshot, but keep the NIC... -----"
+echo ""
+
+# Get the NIC name attached to the VM
+SOURCE_NIC_ID=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query "networkProfile.networkInterfaces[0].id" -o tsv)
+SOURCE_NIC_NAME=$(basename "$SOURCE_NIC_ID")
+
+# Get location from RG
+LOCATION=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query location -o tsv)
+
+# Get source vm size
+SOURCE_VM_SIZE=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query "hardwareProfile.vmSize" -o tsv 2>/dev/null)
+if [ -z "$SOURCE_VM_SIZE" ]; then
+    echo "Source VM $sourceVmName does not exist in resource group $resourceGroup."
+    exit 1
+fi
+
+# Delete the VM (but keep the NIC and disks)
+az vm delete --name "$sourceVmName" --resource-group "$resourceGroup" --yes
+
+# Delete the original OS disk
+az disk delete --name "$SOURCE_DISK_NAME" --resource-group "$resourceGroup" --yes
+
+#
 # Create copy of source disk from the new source disk snapshot
 #
 echo ""
-echo "----- STEP 1.2. Creating a new copy of the source managed disk with the name $sourceDiskName in resource group $resourceGroup... -----"
+echo "----- [VM: $sourceVmName] STEP 1.3. Creating a new copy of the source managed disk with the name $sourceDiskName in resource group $resourceGroup... -----"
 echo ""
 
 # Create a new Managed Disks using the snapshot Id
@@ -193,7 +223,7 @@ prepVmOSDiskName="$prefixName-$sourceVmName-prep-vm-osdisk"
 # Create a new OS disk for the preparation VM
 #
 echo ""
-echo "----- STEP 1.3. Creating a new OS disk for the preparation VM with the name $prepVmOSDiskName in resource group $resourceGroup... -----"
+echo "----- [VM: $sourceVmName] STEP 1.4. Creating a new OS disk for the preparation VM with the name $prepVmOSDiskName in resource group $resourceGroup... -----"
 echo ""
 
 # Get the OS disk snapshot information
@@ -211,7 +241,7 @@ prepVmName="$prefixName-$sourceVmName-prep-vm"
 # Create copy of source disk from the new source disk snapshot
 #
 echo ""
-echo "----- STEP 1.4. Creating a new preparation vm $prepVmName in resource group $resourceGroup... -----"
+echo "----- [VM: $sourceVmName] STEP 1.5. Creating a new preparation vm $prepVmName in resource group $resourceGroup... -----"
 echo ""
 
 # Create preparation VM by attaching existing managed disks as OS
@@ -237,7 +267,7 @@ az vm boot-diagnostics enable \
 
 
 echo ""
-echo "----- STEP 1.5. Waiting for the VM $prepVmName to be ready... -----"
+echo "----- [VM: $sourceVmName] STEP 1.6. Waiting for the VM $prepVmName to be ready... -----"
 echo ""
 
 while true; do
@@ -257,12 +287,12 @@ while true; do
 done
 
 echo ""
-echo "----- STEP 1. Completed. -----"
+echo "----- [VM: $sourceVmName] STEP 1. Completed. -----"
 echo ""
 
 if [ "$MAX_STEP" -lt 2 ]; then exit 0; fi
 echo ""
-echo "----- STEP 2. Resizing source disk partition... -----"
+echo "----- [VM: $sourceVmName] STEP 2. Resizing source disk partition... -----"
 echo ""
 
 # Run script inside the preparation VM to resize the source disk partition
@@ -274,16 +304,16 @@ az vm run-command invoke \
     --parameters "source_vg_name=$source_vg_name source_lv_sizes=$source_lv_sizes pvshrink_script_url=$pvshrinkScriptUrl"
 
 echo ""
-echo "----- STEP 2. Completed. -----"
+echo "----- [VM: $sourceVmName] STEP 2. Completed. -----"
 echo ""
 
 if [ "$MAX_STEP" -lt 3 ]; then exit 0; fi
 echo ""
-echo "----- STEP 3. Prepare target disk... -----"
+echo "----- [VM: $sourceVmName] STEP 3. Prepare target disk... -----"
 echo ""
 
 echo ""
-echo "----- STEP 3.1. Rebooting preparation VM $prepVmName... -----"
+echo "----- [VM: $sourceVmName] STEP 3.1. Rebooting preparation VM $prepVmName... -----"
 echo ""
 
 #
@@ -292,7 +322,7 @@ echo ""
 az vm restart -g "$resourceGroup" -n "$prepVmName"
 
 echo ""
-echo "----- STEP 3.2. Waiting for the VM $prepVmName to be ready... -----"
+echo "----- [VM: $sourceVmName] STEP 3.2. Waiting for the VM $prepVmName to be ready... -----"
 echo ""
 
 while true; do
@@ -315,15 +345,12 @@ done
 targetDiskName="$prefixName-$SOURCE_DISK_NAME-target-disk"
 
 echo ""
-echo "----- STEP 3.3. Creating new target empty disk ${targetDiskName} and attaching it to preparation VM... -----"
+echo "----- [VM: $sourceVmName] STEP 3.3. Creating new target empty disk ${targetDiskName} and attaching it to preparation VM... -----"
 echo ""
 
 #
 # Create new target empty disk
 #
-
-# Get location from RG
-LOCATION=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query location -o tsv)
 
 # Fixed values
 #DiskType="StandardSSD_LRS"
@@ -338,12 +365,12 @@ TARGET_DISK_ID=$(az disk create --resource-group "$resourceGroup" --name "$targe
 az vm disk attach --vm-name "$prepVmName" --resource-group "$resourceGroup" --lun 1 --disks "$TARGET_DISK_ID"
 
 echo ""
-echo "----- STEP 3. Completed. -----"
+echo "----- [VM: $sourceVmName] STEP 3. Completed. -----"
 echo ""
 
 if [ "$MAX_STEP" -lt 4 ]; then exit 0; fi
 echo ""
-echo "----- STEP 4. Copy partitions: source to target... -----"
+echo "----- [VM: $sourceVmName] STEP 4. Copy partitions: source to target... -----"
 echo ""
 
 # Run script inside the preparation VM to copy source disk partitions to target disk
@@ -355,16 +382,16 @@ az vm run-command invoke \
     --parameters "source_vg_name=$source_vg_name"
 
 echo ""
-echo "----- STEP 4. Completed. -----"
+echo "----- [VM: $sourceVmName] STEP 4. Completed. -----"
 echo ""
 
 if [ "$MAX_STEP" -lt 5 ]; then exit 0; fi
 echo ""
-echo "----- STEP 5. Create new virtual machine with shrinked disk... -----"
+echo "----- [VM: $sourceVmName] STEP 5. Create new virtual machine with shrinked disk... -----"
 echo ""
 
 echo ""
-echo "----- STEP 5.1. Detaching target disk $targetDiskName from preparation VM... -----"
+echo "----- [VM: $sourceVmName] STEP 5.1. Detaching target disk $targetDiskName from preparation VM... -----"
 echo ""
 
 # Provide the OS type
@@ -377,18 +404,12 @@ detach_managed_disk "$resourceGroup" "$targetDiskName"
 MANAGED_DISK_ID=$(az disk show --name $targetDiskName --resource-group $resourceGroup --query [id] -o tsv)
 
 # Provide the name of the virtual machine
-targetVmName="$prefixName-$sourceVmName-vm"
+#targetVmName="$prefixName-$sourceVmName-vm"
+targetVmName=$sourceVmName
 
 echo ""
-echo "----- STEP 5.2. Creating target virtual machine $targetVmName... -----"
+echo "----- [VM: $sourceVmName] STEP 5.2. Creating target virtual machine $targetVmName... -----"
 echo ""
-
-# Get source vm size
-SOURCE_VM_SIZE=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query "hardwareProfile.vmSize" -o tsv 2>/dev/null)
-if [ -z "$SOURCE_VM_SIZE" ]; then
-    echo "Source VM $sourceVmName does not exist in resource group $resourceGroup."
-    exit 1
-fi
 
 # Create target VM by attaching existing managed disks as OS
 az vm create \
@@ -396,11 +417,11 @@ az vm create \
     --resource-group $resourceGroup \
     --attach-os-disk $MANAGED_DISK_ID \
     --os-type $osType \
-    --subnet $targetVmSubnetId \
+    --nics "$SOURCE_NIC_NAME" \
     --public-ip-address "" \
     --nsg "" \
     --size $SOURCE_VM_SIZE \
-    --tag "CreatedBy=DiskShrinkingEngine"
+    --tag "CreatedBy=DiskShrinkingEngine" #--subnet $targetVmSubnetId \
 
 # Enable boot diagnostics
 az vm boot-diagnostics enable \
@@ -408,12 +429,12 @@ az vm boot-diagnostics enable \
     --resource-group $resourceGroup
 
 echo ""
-echo "----- STEP 5. Completed. -----"
+echo "----- [VM: $sourceVmName] STEP 5. Completed. -----"
 echo ""
 
 if [ "$MAX_STEP" -lt 6 ]; then exit 0; fi
 echo ""
-echo "----- STEP 6. Cleaning up the preparation VM $prepVmName... -----"
+echo "----- [VM: $sourceVmName] STEP 6. Cleaning up the preparation VM $prepVmName... -----"
 echo ""
 
 # Delete the preparation VM
@@ -425,10 +446,8 @@ az vm delete --name "$prepVmName" --resource-group "$resourceGroup" --yes --no-w
 # Delete the source disk snapshot
 #az snapshot delete --name $sourceVmOSDiskSnapshotName --resource-group $resourceGroup --yes --no-wait
 
-echo "Preparation VM and associated resources cleaned up."
-
 echo ""
-echo "----- STEP 6. Completed. -----"
+echo "----- [VM: $sourceVmName] STEP 6. Completed. -----"
 echo ""
 
 #
@@ -442,5 +461,5 @@ minutes=$((elapsed / 60))
 seconds=$((elapsed % 60))
 
 echo ""
-echo "----- Elapsed time: ${minutes} minutes and ${seconds} seconds. -----"
+echo "----- [VM: $sourceVmName] Elapsed time: ${minutes} minutes and ${seconds} seconds. -----"
 echo ""
