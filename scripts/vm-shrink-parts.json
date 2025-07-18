@@ -1,12 +1,12 @@
 [
     {
-        "vm_name": "rocky5",
+        "vm_name": "rocky20",
         "vg_name_to_shrink": "my_vg",
         "new_lv_sizes": "my_lv01:1G,my_lv02:1G",
         "target_disk_size_gb": "16"
     },
     {
-        "vm_name": "rocky6",
+        "vm_name": "rocky21",
         "vg_name_to_shrink": "my_vg",
         "new_lv_sizes": "my_lv01:1G,my_lv02:1G",
         "target_disk_size_gb": "16"
@@ -21,18 +21,6 @@
         "vm_name": "vm-mig-56",
         "vg_name_to_shrink": "ktvg",
         "new_lv_sizes": "lv01:3G,lv02:6G",
-        "target_disk_size_gb": "64"
-    },
-    {
-        "vm_name": "unffran-rocky-10-126-147-120-clone-test-with-swap",
-        "vg_name_to_shrink": "rl",
-        "new_lv_sizes": "home:1G,opt:8G,root:10G,swap:7.89G,tlanBiS:13G,tmp:1G,var:8G,var_lib_pgsql:13G",
-        "target_disk_size_gb": "64"
-    },
-    {
-        "vm_name": "unffran-rocky-10-126-147-120-clone-test",
-        "vg_name_to_shrink": "rl",
-        "new_lv_sizes": "opt:8G,root:10G,tlanBiS:13G,tmp:1G,var_lib_pgsql:13G",
         "target_disk_size_gb": "64"
     }
 ]

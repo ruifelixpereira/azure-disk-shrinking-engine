@@ -1,4 +1,4 @@
 [
-    { "source_vm_name": "rocky5" },
-    { "source_vm_name": "rocky6" }
+    { "source_vm_name": "rocky20" },
+    { "source_vm_name": "rocky21" }
 ]

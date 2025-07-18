@@ -195,7 +195,7 @@ The result of the shrinking process is a new Azure VM with a smaller disk, which
 If you need to shrink a considerable number of VMs, you can create a file named `vm-list.json` with the list of the VMs to shrink. This file name can be customized in `.env` using the parameter `vmListToShrinkJsonFile`. Then, execute the `bulk-shrink-disks.sh` script.
 
 ```bash
-./bulk-shrink-disks
+./bulk-shrink-disks.sh
 ```
 
 This script will read the `vm-list.json` file and execute the disk shrinking process for each VM in parallel. The script will create a new VM for each source VM listed in the `vm-list.json` file, using the configurations provided in the `.env` file and the json configuration file.
