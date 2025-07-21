@@ -141,7 +141,7 @@ echo ""
 az account set --subscription $subscriptionId
 
 # Check if source vm exists
-SOURCE_DISK_NAME=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query "storageProfile.osDisk.name" -o tsv 2>/dev/null)
+SOURCE_DISK_NAME=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query "storageProfile.osDisk.name" -o tsv)
 
 if [ -z "$SOURCE_DISK_NAME" ]; then
     echo "Source VM $sourceVmName does not exist in resource group $resourceGroup."
@@ -156,7 +156,7 @@ echo "----- [VM: $sourceVmName] STEP 1.1. Creating snapshot of the source disk $
 echo ""
 
 # Get source disk ID
-SOURCE_DISK_ID=$(az disk show --name "$SOURCE_DISK_NAME" --resource-group "$resourceGroup" --query id -o tsv 2>/dev/null)
+SOURCE_DISK_ID=$(az disk show --name "$SOURCE_DISK_NAME" --resource-group "$resourceGroup" --query id -o tsv)
 if [ -z "$SOURCE_DISK_ID" ]; then
     echo "Disk $SOURCE_DISK_NAME does not exist in resource group $resourceGroup."
     exit 1
@@ -192,7 +192,7 @@ SOURCE_NIC_NAME=$(basename "$SOURCE_NIC_ID")
 LOCATION=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query location -o tsv)
 
 # Get source vm size
-SOURCE_VM_SIZE=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query "hardwareProfile.vmSize" -o tsv 2>/dev/null)
+SOURCE_VM_SIZE=$(az vm show --name "$sourceVmName" --resource-group "$resourceGroup" --query "hardwareProfile.vmSize" -o tsv)
 if [ -z "$SOURCE_VM_SIZE" ]; then
     echo "Source VM $sourceVmName does not exist in resource group $resourceGroup."
     exit 1
