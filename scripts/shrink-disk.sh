@@ -307,6 +307,8 @@ echo ""
 echo "----- [VM: $sourceVmName] STEP 2. Completed. -----"
 echo ""
 
+az account get-access-token --scope https://management.core.windows.net//.default
+
 if [ "$MAX_STEP" -lt 3 ]; then exit 0; fi
 echo ""
 echo "----- [VM: $sourceVmName] STEP 3. Prepare target disk... -----"
@@ -368,6 +370,8 @@ echo ""
 echo "----- [VM: $sourceVmName] STEP 3. Completed. -----"
 echo ""
 
+az account get-access-token --scope https://management.core.windows.net//.default
+
 if [ "$MAX_STEP" -lt 4 ]; then exit 0; fi
 echo ""
 echo "----- [VM: $sourceVmName] STEP 4. Copy partitions: source to target... -----"
@@ -384,6 +388,9 @@ az vm run-command invoke \
 echo ""
 echo "----- [VM: $sourceVmName] STEP 4. Completed. -----"
 echo ""
+
+az account get-access-token --scope https://management.core.windows.net//.default
+
 
 if [ "$MAX_STEP" -lt 5 ]; then exit 0; fi
 echo ""
@@ -422,6 +429,10 @@ az vm create \
     --nsg "" \
     --size $SOURCE_VM_SIZE \
     --tag "CreatedBy=DiskShrinkingEngine" #--subnet $targetVmSubnetId \
+
+
+az account get-access-token --scope https://management.core.windows.net//.default
+
 
 # Enable boot diagnostics
 az vm boot-diagnostics enable \
